@@ -1,0 +1,622 @@
+package szhome.bbs.util;
+
+import android.app.Activity;
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
+import android.widget.ImageView;
+
+import com.bumptech.glide.BitmapRequestBuilder;
+import com.bumptech.glide.BitmapTypeRequest;
+import com.bumptech.glide.DrawableRequestBuilder;
+import com.bumptech.glide.DrawableTypeRequest;
+import com.bumptech.glide.GenericRequestBuilder;
+import com.bumptech.glide.GifRequestBuilder;
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.RequestManager;
+import com.bumptech.glide.load.Transformation;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.request.FutureTarget;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
+import com.szhome.common.service.AppActivityManager;
+import szhome.bbs.util.transform.ColorFilterTransformation;
+import com.szhome.nimim.login.UserHelper;
+import com.szhome.theme.config.ThemeConfig;
+import com.szhome.theme.loader.ThemeManager;
+
+import java.io.File;
+
+import szhome.bbs.R;
+
+/**
+ * 简单封装glide类
+ * <p>
+ * Created by linyue on 2016/7/18.
+ */
+public class ImageLoad {
+    private volatile static ImageLoad instance = null;
+    private static final String TAG = "ImageLoad";
+
+    /**
+     * 单例模式
+     *
+     * @return
+     */
+    public static ImageLoad getInstance() {
+        // 先检查实例是否存在，如果不存在才进入下面的同步块
+        if (instance == null) {
+            // 同步块，线程安全的创建实例
+            synchronized (ImageLoad.class) {
+                // 再次检查实例是否存在，如果不存在才真正的创建实例
+                if (instance == null) {
+                    instance = new ImageLoad();
+                }
+            }
+        }
+        return instance;
+    }
+
+    /**
+     * 下载监听器
+     **/
+    private DownLoadListener downLoadListener;
+    /**
+     * 分享图片监听器
+     **/
+    private ShareListener shareListener;
+    private RequestManager manager;
+    private String url = "";
+    private ImageView imgv = null;
+    private Uri uri = null;
+    private int placeHolder = 0;
+    private float thumbnail = 1;
+    private boolean hasPlaceHolder = true;
+    private boolean asBitmap = false;
+    private boolean asGif = false;
+    //是否跳过内存缓存
+    private boolean skipMemoryCache = true;
+    //图片限制宽高
+    private int resizeWidth = 0;
+    private int resizeHeight = 0;
+    /**
+     * 监听器
+     **/
+    private RequestListener requestListener = null;
+
+    /****/
+    private Transformation bitmapTransformation = null;
+
+
+    /**夜间模式**/
+    private Transformation nigthThemeTransformation = null;
+    /**主题ID**/
+    private int ThemeId = 0;
+
+
+    /**
+     * ------构造方法-------
+     **/
+    public ImageLoad() {
+    }
+
+    /**
+     * ------初始化数据------
+     **/
+    public ImageLoad LoadImg(Context context, String url, ImageView view) {
+        this.url = url;
+        this.imgv = view;
+        if (context == null) {
+            context = UserHelper.getInstance().getContext();
+        }
+
+        if (context instanceof Activity && !AppActivityManager.getAppManager().hasActivity((Activity) context)) {
+            return this;
+        }
+        manager = Glide.with(context);
+        ThemeId = ThemeConfig.getCustomThemeId(context.getApplicationContext());
+        return this;
+    }
+
+    public ImageLoad LoadImg(Context context, Uri uri, ImageView view) {
+
+        this.uri = uri;
+        this.imgv = view;
+        if (context == null) {
+            context = UserHelper.getInstance().getContext();
+        }
+
+        if (context instanceof Activity && !AppActivityManager.getAppManager().hasActivity((Activity) context)) {
+            return this;
+        }
+        manager = Glide.with(context);
+        ThemeId = ThemeConfig.getCustomThemeId(context.getApplicationContext());
+
+
+        return this;
+    }
+
+    public ImageLoad LoadImg(Context context, String url) {
+
+        return LoadImg(context, url, null);
+    }
+
+    public ImageLoad LoadImg(Context context, Uri uri) {
+
+        return LoadImg(context, uri, null);
+    }
+
+    /**
+     * 默认占位图
+     *
+     * @param placeHolder 占位图ID
+     */
+    public ImageLoad PlaceHolder(int placeHolder) {
+        this.placeHolder = placeHolder;
+        return this;
+    }
+
+    /***
+     * 缩略图缩放比例
+     **/
+    public ImageLoad thumbnail(float thumbnail) {
+        this.thumbnail = thumbnail;
+        return this;
+    }
+
+
+    /**
+     * 转换为BITMAP
+     **/
+    public ImageLoad asBitmap() {
+        this.asBitmap = true;
+        this.asGif = false;
+        return this;
+    }
+
+    /**
+     * 转换为GIF
+     **/
+    public ImageLoad asGif() {
+        this.asGif = true;
+        this.asBitmap = false;
+        return this;
+    }
+
+    /**
+     * --------加载图片处理--------
+     **/
+    public ImageLoad transform(Transformation transformation) {
+        this.bitmapTransformation = transformation;
+        return this;
+    }
+
+    public ImageLoad noPlaceHolder() {
+        this.hasPlaceHolder = false;
+        return this;
+    }
+
+    /**
+     * --------加载监听器--------
+     **/
+    public ImageLoad RequestListener(RequestListener requestListener) {
+        this.requestListener = requestListener;
+        return this;
+    }
+
+    /**
+     * --------加载下载监听器--------
+     **/
+    public ImageLoad onDownLoadListener(DownLoadListener downLoadListener) {
+        this.downLoadListener = downLoadListener;
+        return this;
+    }
+
+    /**
+     * --------加载下载监听器--------
+     **/
+    public ImageLoad onShareListener(ShareListener shareListener) {
+        this.shareListener = shareListener;
+        return this;
+    }
+
+    /**
+     * --------设置是否跳过内存缓存--------
+     **/
+    public ImageLoad skipMemoryCache(boolean skipMemoryCache) {
+        this.skipMemoryCache = skipMemoryCache;
+        return this;
+    }
+
+    /**
+     * --------设置图片限制宽高--------
+     **/
+    public ImageLoad resize(int width, int height) {
+        this.resizeWidth = width;
+        this.resizeHeight = height;
+        return this;
+    }
+
+    /**
+     * 加载图片
+     */
+    public void load() {
+        if (manager == null) {
+            return;
+        }
+        if (url == null && uri == null) {
+            url = "";
+        }
+        if (imgv == null) {
+            return;
+        }
+
+        GenericRequestBuilder request = getRequest();
+
+        if (asBitmap) {
+
+            BitmapTypeRequest bitmapTypeRequest = (BitmapTypeRequest) request;
+            if(bitmapTransformation!=null && nigthThemeTransformation!=null){
+
+                bitmapTypeRequest.transform(bitmapTransformation,nigthThemeTransformation).thumbnail(thumbnail).into(imgv);
+            }else if(bitmapTransformation!=null){
+
+                bitmapTypeRequest.transform(bitmapTransformation).thumbnail(thumbnail).into(imgv);
+            }else if(nigthThemeTransformation!=null){
+
+                bitmapTypeRequest.transform(nigthThemeTransformation).thumbnail(thumbnail).into(imgv);
+            }else{
+
+                bitmapTypeRequest.thumbnail(thumbnail).into(imgv);
+            }
+
+        } else if (asGif) {
+
+            GifRequestBuilder gifTypeRequest = (GifRequestBuilder) request;
+            gifTypeRequest.thumbnail(thumbnail).into(imgv);
+
+        } else {
+
+            DrawableTypeRequest drawableRequest = (DrawableTypeRequest) request;
+
+            if(bitmapTransformation!=null && nigthThemeTransformation!=null){
+                drawableRequest.bitmapTransform(bitmapTransformation,nigthThemeTransformation).thumbnail(thumbnail).into(imgv);
+            }else if(bitmapTransformation!=null){
+                drawableRequest.bitmapTransform(bitmapTransformation).thumbnail(thumbnail).into(imgv);
+
+            }else if(nigthThemeTransformation!=null){
+                drawableRequest.bitmapTransform(nigthThemeTransformation).thumbnail(thumbnail).into(imgv);
+
+            }else{
+                drawableRequest.thumbnail(thumbnail).into(imgv);
+            }
+        }
+
+        reInit();
+    }
+
+    /**
+     * 加载图片
+     */
+    public void load(Target target) {
+        if (manager == null) {
+            return;
+        }
+        if (url == null && uri == null) {
+            url = "";
+        }
+        if (target == null) {
+            return;
+        }
+
+        GenericRequestBuilder request = getRequest();
+
+        if (asBitmap) {
+
+
+            BitmapTypeRequest bitmapTypeRequest = (BitmapTypeRequest) request;
+            if(bitmapTransformation!=null && nigthThemeTransformation!=null){
+
+                bitmapTypeRequest.transform(bitmapTransformation,nigthThemeTransformation).thumbnail(thumbnail).into(target);
+            }else if(bitmapTransformation!=null){
+
+                bitmapTypeRequest.transform(bitmapTransformation).thumbnail(thumbnail).into(target);
+            }else if(nigthThemeTransformation!=null){
+
+                bitmapTypeRequest.transform(nigthThemeTransformation).thumbnail(thumbnail).into(target);
+            }else{
+
+                bitmapTypeRequest.thumbnail(thumbnail).into(target);
+            }
+
+        } else if (asGif) {
+
+            GifRequestBuilder gifTypeRequest = (GifRequestBuilder) request;
+            gifTypeRequest.centerCrop().diskCacheStrategy(DiskCacheStrategy.SOURCE).dontAnimate().thumbnail(thumbnail).into(target);
+        } else {
+
+
+
+            DrawableRequestBuilder drawableRequest = (DrawableRequestBuilder) request;
+            if(bitmapTransformation!=null && nigthThemeTransformation!=null){
+                drawableRequest.bitmapTransform(bitmapTransformation,nigthThemeTransformation).thumbnail(thumbnail).into(target);
+            }else if(bitmapTransformation!=null){
+                drawableRequest.bitmapTransform(bitmapTransformation).thumbnail(thumbnail).into(target);
+
+            }else if(nigthThemeTransformation!=null){
+                drawableRequest.bitmapTransform(nigthThemeTransformation).thumbnail(thumbnail).into(target);
+
+            }else{
+                drawableRequest.thumbnail(thumbnail).into(target);
+            }
+
+        }
+
+        reInit();
+    }
+
+
+    /**
+     * 加载头像
+     */
+    public void loadHeader() {
+        placeHolder = R.drawable.ic_user_default_head;
+        load();
+    }
+
+
+    /**
+     * 下载文件
+     *
+     * @param path 保存地址
+     */
+    public void downLoad(final String path) {
+        if (manager == null) {
+            return;
+        }
+
+        if (com.szhome.common.util.StringUtils.isEmpty(url) && uri == null) {
+            return;
+        }
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                asBitmap = false;
+                asGif = false;
+                DrawableTypeRequest request = (DrawableTypeRequest) getRequest();
+                FutureTarget<File> futureTarget = request.downloadOnly(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL);
+
+                try {
+                    File file = futureTarget.get();
+
+                    boolean isSuccess = com.szhome.common.util.FileUtil.copyFile(file.getAbsolutePath(), path);
+                    if (downLoadListener == null) {
+                        return;
+                    }
+                    if (isSuccess) {
+                        downLoadListener.onSuccess();
+                    } else {
+                        downLoadListener.onFail();
+                    }
+
+                } catch (Exception e) {
+                    if (downLoadListener != null) {
+                        downLoadListener.onFail();
+                    }
+                }
+                // 最后通知图库更新
+                MediaScannerConnection.scanFile(UserHelper.getInstance().getContext(), new String[]{path}, null, null);
+            }
+        }).start();
+    }
+
+
+    /**
+     * 根据地址获取bitmap
+     *
+     * @param context 上下文
+     * @param url     地址
+     * @return 位图
+     */
+    public Bitmap downLoadForBitmap(Context context, String url) {
+        return downLoadForBitmap(context, url, 500, 500);
+    }
+
+    /**
+     * * 根据地址获取bitmap
+     *
+     * @param context 上下文
+     * @param url     地址
+     * @param width   宽度
+     * @param heigth  高度
+     * @return
+     */
+    public Bitmap downLoadForBitmap(Context context, String url, int width, int heigth) {
+        if (com.szhome.common.util.StringUtils.isEmpty(url)) {
+            return null;
+        }
+        Bitmap myBitmap = null;
+        try {
+            myBitmap = Glide.with(context)
+                    .load(url)
+                    .asBitmap() //必须
+                    .fitCenter()
+                    .into(width, heigth)
+                    .get();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return myBitmap;
+
+    }
+
+
+    /**
+     * 获取分享图片
+     *
+     * @param width
+     * @param heigth
+     */
+    public void getShareImage(final int width, final int heigth) {
+        if (manager == null) {
+            return;
+        }
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                asBitmap = false;
+                asGif = false;
+
+                DrawableTypeRequest request = (DrawableTypeRequest) getRequest();
+                FutureTarget<File> futureTarget = request.downloadOnly(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL);
+                Bitmap myBitmap = null;
+                Bitmap thum = null;
+                try {
+                    File file = futureTarget.get();
+                    myBitmap = (Bitmap) request
+                            .asBitmap() //必须
+                            .fitCenter()
+                            .into(width, heigth)
+                            .get();
+                    if (myBitmap != null) {
+                        thum = Bitmap.createScaledBitmap(myBitmap, 100, 100, true);
+                    }
+
+                    if (shareListener != null) {
+                        shareListener.onSuccess(file, myBitmap, thum);
+                    }
+                } catch (Exception e) {
+                    if (shareListener != null) {
+                        shareListener.onFail();
+                    }
+                }
+            }
+        }).start();
+    }
+
+    /**
+     * 获取图片请求对象
+     *
+     * @return 请求对象
+     */
+    private GenericRequestBuilder getRequest() {
+        DrawableTypeRequest request;
+        //加载地址
+        if (uri != null) {
+            request = manager.load(uri);
+        } else {
+            request = manager.load(url);
+        }
+        //加载默认图
+        Drawable defalutDrawable;
+        if (placeHolder == 0) {
+            defalutDrawable = ThemeManager.getInstance().getDrawable(R.drawable.bg_default_img);
+        } else {
+            defalutDrawable = ThemeManager.getInstance().getDrawable(placeHolder);
+        }
+
+        if (hasPlaceHolder) {
+            request.placeholder(defalutDrawable);
+            request.error(defalutDrawable);
+            request.fallback(defalutDrawable);
+        }
+
+        //判断是否为夜间模式
+        if(ThemeId != 0 && UserHelper.getInstance().getContext()!=null){
+            //夜间模式
+            nigthThemeTransformation = new ColorFilterTransformation(UserHelper.getInstance().getContext());
+        }else{
+            nigthThemeTransformation = null;
+        }
+
+
+        if (requestListener != null) {
+            request.listener(requestListener);
+        }
+        if (resizeHeight > 0 && resizeWidth > 0) {
+            request.override(resizeWidth, resizeHeight);
+        }
+        request.skipMemoryCache(skipMemoryCache);
+
+        if (asBitmap) {
+            return request.asBitmap();
+        } else if (asGif) {
+            return request.asGif();
+        } else {
+            return request;
+        }
+
+    }
+
+
+    /**
+     * 清除内存缓存
+     *
+     * @param context 上下文对象
+     */
+    public void clearMemory(Context context) {
+        Glide.get(context).clearMemory();
+    }
+
+    /**
+     * 清除磁盘缓存
+     */
+    public void clearDiskMemory() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Glide.get(UserHelper.getInstance().getContext()).clearDiskCache();
+            }
+        }).start();
+
+    }
+
+    /**
+     * 下载监听器
+     */
+    public interface DownLoadListener {
+        void onSuccess();
+
+        void onFail();
+    }
+
+    /**
+     * 分享监听器
+     */
+    public interface ShareListener {
+        /**
+         * 下载图片成功
+         *
+         * @param file       图片文件
+         * @param bitmap     大图bitmap
+         * @param thumBitmap 缩略图bitmap
+         */
+        void onSuccess(File file, Bitmap bitmap, Bitmap thumBitmap);
+
+        void onFail();
+    }
+
+
+    /**
+     * 重新初始化参数
+     */
+    private void reInit() {
+        downLoadListener = null;
+        imgv = null;
+        uri = null;
+        placeHolder = 0;
+        thumbnail = 1;
+        hasPlaceHolder = true;
+        asBitmap = false;
+        asGif = false;
+        requestListener = null;
+        bitmapTransformation = null;
+        skipMemoryCache = true;
+        resizeWidth = 0;
+        resizeHeight = 0;
+    }
+}
